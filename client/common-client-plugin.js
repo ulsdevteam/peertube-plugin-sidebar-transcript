@@ -11,10 +11,10 @@ function register ({ registerHook }) {
         const uuid = getVideoUuidFromUrl()
         if (!uuid) return
 
-        const segments = await fetchCaptions(uuid)
-        if (!segments.length) return
+        const captions = await fetchCaptions(uuid)
+        if (!captions.length) return
 
-        buildTranscriptSidebar(player, segments)
+        buildTranscriptSidebar(player, captions)
       } catch (err) {
         console.error('[transcript-sidebar]', err)
       }
@@ -43,29 +43,41 @@ async function fetchCaptions (uuid) {
   var captions = payload.data || payload
   if (!Array.isArray(captions) || captions.length === 0) return []
 
-  var captionPath = captions[0].captionPath || captions[0].path || captions[0].fileUrl
-  if (!captionPath) return []
+  var results = []
 
-  var captionUrl = new URL(captionPath, window.location.origin).href
-  var fileRes = await fetch(captionUrl)
-  if (!fileRes.ok) return []
+  for (const caption of captions) {
+    var captionPath = caption.captionPath || caption.path || caption.fileUrl
+    if (!captionPath) continue
 
-  var text = await fileRes.text()
-  var result = parse(text)
-  var entries = result.entries || []
+    var captionUrl = new URL(captionPath, window.location.origin).href
+    var fileRes = await fetch(captionUrl)
+    if (!fileRes.ok) continue
 
-  return entries
-    .map(function (entry) {
-      var start = Number(entry.from)
-      var txt = typeof entry.text === 'string' ? entry.text.trim() : ''
-      if (!Number.isFinite(start) || !txt) return null
-      return {
-        start: start / 1000,
-        startFormatted: formatDuration(start / 1000),
-        text: txt
-      }
-    })
-    .filter(Boolean)
+    var text = await fileRes.text()
+    var entries = parse(text).entries || []
+
+    var segments = entries
+      .map(function (entry) {
+        var start = Number(entry.from)
+        var txt = typeof entry.text === 'string' ? entry.text.trim() : ''
+        if (!Number.isFinite(start) || !txt) return null
+        return {
+          start: start / 1000,
+          startFormatted: formatDuration(start / 1000),
+          text: txt
+        }
+      })
+      .filter(Boolean)
+
+    if (segments.length > 0) {
+      results.push({
+        language: caption.language,
+        segments: segments
+      })
+    }
+  }
+
+  return results
 }
 
 function formatDuration (seconds) {
@@ -77,7 +89,7 @@ function formatDuration (seconds) {
   return h > 0 ? h + ':' + mm + ':' + ss : m + ':' + ss
 }
 
-function buildTranscriptSidebar (player, segments) {
+function buildTranscriptSidebar (player, captions) {
   var playerEl = player.el()
   if (!playerEl) return
 
@@ -91,6 +103,12 @@ function buildTranscriptSidebar (player, segments) {
   title.className = 'vjs-transcript-title'
   title.textContent = 'Transcript'
 
+  var settingsBtn = document.createElement('button')
+  settingsBtn.className = 'vjs-transcript-settings'
+  settingsBtn.type = 'button'
+  settingsBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-horizontal preview-icon"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg>'
+  settingsBtn.setAttribute('aria-label', 'Transcript settings')
+
   var closeBtn = document.createElement('button')
   closeBtn.className = 'vjs-transcript-close'
   closeBtn.type = 'button'
@@ -98,6 +116,7 @@ function buildTranscriptSidebar (player, segments) {
   closeBtn.setAttribute('aria-label', 'Close transcript')
 
   header.appendChild(title)
+  header.appendChild(settingsBtn)
   header.appendChild(closeBtn)
   sidebar.appendChild(header)
 
@@ -106,42 +125,70 @@ function buildTranscriptSidebar (player, segments) {
 
   var segmentEls = []
 
-  for (var i = 0; i < segments.length; i++) {
-    (function (seg) {
-      var row = document.createElement('div')
-      row.className = 'vjs-transcript-segment'
-      row.setAttribute('data-start', seg.start)
-      row.setAttribute('tabindex', '0')
+  function populateSegments(segments) {
+    while (segmentEls.length > 0) {
+      segmentsContainer.removeChild(segmentEls.pop())
+    }
 
-      var timeSpan = document.createElement('span')
-      timeSpan.className = 'vjs-transcript-time'
-      timeSpan.textContent = seg.startFormatted
+    for (var i = 0; i < segments.length; i++) {
+      (function (seg) {
+        var row = document.createElement('div')
+        row.className = 'vjs-transcript-segment'
+        row.setAttribute('data-start', seg.start)
+        row.setAttribute('tabindex', '0')
 
-      var textSpan = document.createElement('span')
-      textSpan.className = 'vjs-transcript-text'
-      textSpan.textContent = seg.text
+        var timeSpan = document.createElement('span')
+        timeSpan.className = 'vjs-transcript-time'
+        timeSpan.textContent = seg.startFormatted
 
-      row.appendChild(timeSpan)
-      row.appendChild(textSpan)
+        var textSpan = document.createElement('span')
+        textSpan.className = 'vjs-transcript-text'
+        textSpan.textContent = seg.text
 
-      row.addEventListener('click', function () {
-        player.currentTime(seg.start)
-        player.play()
-      })
+        row.appendChild(timeSpan)
+        row.appendChild(textSpan)
 
-      row.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
+        row.addEventListener('click', function () {
           player.currentTime(seg.start)
           player.play()
-        }
-      })
+        })
 
-      segmentsContainer.appendChild(row)
-      segmentEls.push(row)
-    })(segments[i])
+        row.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            player.currentTime(seg.start)
+            player.play()
+          }
+        })
+
+        segmentsContainer.appendChild(row)
+        segmentEls.push(row)
+      })(segments[i])
+    }  
   }
 
+  populateSegments(captions[0].segments)
+
+  var settingsContainer = document.createElement('div')
+  settingsContainer.className = 'vjs-transcript-language-select'
+
+  var languageLabel = document.createElement('label')
+  languageLabel.textContent = 'Language: '
+
+  var languageSelect = document.createElement('select')
+  for (var i = 0; i < captions.length; i++) {
+    languageSelect.add(new Option(captions[i].label, captions[i].id, i == 0, i == 0))    
+  }
+
+  languageLabel.htmlFor = languageSelect.id = 'transcript-language-select'
+
+  languageSelect.addEventListener('change', function () {
+    populateSegments(captions[languageSelect.selectedIndex].segments)
+  })
+
+  settingsContainer.appendChild(languageLabel)
+  settingsContainer.appendChild(languageSelect)
+  sidebar.appendChild(settingsContainer)
   sidebar.appendChild(segmentsContainer)
   playerEl.appendChild(sidebar)
 
@@ -179,6 +226,23 @@ function buildTranscriptSidebar (player, segments) {
   })
 
   closeBtn.addEventListener('click', closeSidebar)
+
+  var isLanguageSelectOpen = false
+
+  function showLanguageSelect() {
+    isLanguageSelectOpen = true
+    settingsContainer.classList.add('transcript-show-language-select')
+  }
+
+  function hideLanguageSelect() {
+    isLanguageSelectOpen = false
+    settingsContainer.classList.remove('transcript-show-language-select')
+  }
+
+  settingsBtn.addEventListener('click', function() {
+    if (isLanguageSelectOpen) hideLanguageSelect()
+    else showLanguageSelect()
+  })
 
   player.on('timeupdate', function () {
     var currentTime = player.currentTime()

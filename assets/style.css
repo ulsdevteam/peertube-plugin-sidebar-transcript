@@ -46,6 +46,23 @@
   color: #fff;
 }
 
+.vjs-transcript-settings {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.vjs-transcript-settings:hover {
+    color: #fff;
+}
+
+.vjs-transcript-language-select:not(.transcript-show-language-select) {
+  display: none;
+}
+
 .vjs-transcript-segments {
   overflow-y: auto;
   flex: 1;
