@@ -103,6 +103,9 @@ function buildTranscriptSidebar (player, captions) {
   title.className = 'vjs-transcript-title'
   title.textContent = 'Transcript'
 
+  var controls = document.createElement('div')
+  controls.className = 'vjs-transcript-controls'
+
   var settingsBtn = document.createElement('button')
   settingsBtn.className = 'vjs-transcript-settings'
   settingsBtn.type = 'button'
@@ -116,8 +119,9 @@ function buildTranscriptSidebar (player, captions) {
   closeBtn.setAttribute('aria-label', 'Close transcript')
 
   header.appendChild(title)
-  header.appendChild(settingsBtn)
-  header.appendChild(closeBtn)
+  controls.appendChild(settingsBtn)
+  controls.appendChild(closeBtn)
+  header.appendChild(controls)
   sidebar.appendChild(header)
 
   var segmentsContainer = document.createElement('div')
@@ -177,7 +181,7 @@ function buildTranscriptSidebar (player, captions) {
 
   var languageSelect = document.createElement('select')
   for (var i = 0; i < captions.length; i++) {
-    languageSelect.add(new Option(captions[i].label, captions[i].id, i == 0, i == 0))    
+    languageSelect.add(new Option(captions[i].language.label, captions[i].language.id, i == 0, i == 0))    
   }
 
   languageLabel.htmlFor = languageSelect.id = 'transcript-language-select'
